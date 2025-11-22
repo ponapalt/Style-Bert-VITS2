@@ -13,9 +13,9 @@ num2words
 numpy<2
 onnx
 onnxconverter-common
-onnxruntime
-onnxruntime-directml; sys_platform == 'win32'
-onnxruntime-gpu; sys_platform != 'darwin'
+onnxruntime==1.23.0
+onnxruntime-directml==1.23.0; sys_platform == 'win32'
+onnxruntime-gpu==1.23.0; sys_platform != 'darwin'
 onnxsim-prebuilt
 # protobuf==4.25
 psutil
@@ -29,5 +29,5 @@ pyworld-prebuilt
 # tensorboard
 torch<2.4
 torchaudio<2.4
-transformers
+transformers<4.47.0
 umap-learn
