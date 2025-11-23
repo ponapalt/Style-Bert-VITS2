@@ -33,5 +33,6 @@ stable_ts
 tensorboard
 torch>=2.9.0
 torchaudio>=2.9.0
+torchcodec
 transformers>=4.47.0
 umap-learn
