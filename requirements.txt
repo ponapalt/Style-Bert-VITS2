@@ -30,7 +30,7 @@ pyworld-prebuilt
 soxr
 stable_ts
 tensorboard
-torch>=2.7.0
-torchaudio>=2.7.0
+torch>=2.9.0
+torchaudio>=2.9.0
 transformers>=4.47.0
 umap-learn
