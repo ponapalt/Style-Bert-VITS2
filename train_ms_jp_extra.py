@@ -124,15 +124,20 @@ def run():
 
     backend = "nccl"
     # Note: gloo backend is broken in PyTorch 2.9+ on Windows
-    # Try nccl first (works on Windows with CUDA 12.8+), fall back if needed
-    dist.init_process_group(
-        backend=backend,
-        init_method="env://",
-        timeout=datetime.timedelta(seconds=300),
-    )  # Use torchrun instead of mp.spawn
-    rank = dist.get_rank()
-    local_rank = int(os.environ["LOCAL_RANK"])
-    n_gpus = dist.get_world_size()
+    # NCCL is not available on Windows, so skip distributed init for single GPU
+    n_gpus = int(os.environ.get("WORLD_SIZE", 1))
+    if n_gpus > 1:
+        dist.init_process_group(
+            backend=backend,
+            init_method="env://",
+            timeout=datetime.timedelta(seconds=300),
+        )  # Use torchrun instead of mp.spawn
+        rank = dist.get_rank()
+        local_rank = int(os.environ["LOCAL_RANK"])
+    else:
+        # Single GPU mode - no distributed training
+        rank = 0
+        local_rank = 0
 
     hps = HyperParameters.load_from_json(args.config)
     # This is needed because we have to pass values to `train_and_evaluate()
