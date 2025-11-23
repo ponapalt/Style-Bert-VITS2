@@ -123,8 +123,8 @@ def run():
     )
 
     backend = "nccl"
-    if platform.system() == "Windows":
-        backend = "gloo"  # If Windows,switch to gloo backend.
+    # Note: gloo backend is broken in PyTorch 2.9+ on Windows
+    # Try nccl first (works on Windows with CUDA 12.8+), fall back if needed
     dist.init_process_group(
         backend=backend,
         init_method="env://",
