@@ -18,7 +18,9 @@ config = get_config()
 
 model = Model.from_pretrained("pyannote/wespeaker-voxceleb-resnet34-LM")
 inference = Inference(model, window="whole")
-device = torch.device(config.style_gen_config.device)
+# pyannote.audio 4.0+ has compatibility issues with torchaudio 2.9+ on CUDA
+# Use CPU for style vector generation (lightweight task)
+device = torch.device("cpu")
 inference.to(device)
 
 
