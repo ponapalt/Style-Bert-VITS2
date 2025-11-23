@@ -1,0 +1,55 @@
+name: Release Installer
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - 'installer/**'
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get current date and short SHA
+        id: vars
+        run: |
+          echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Create sbv2.zip
+        run: |
+          cd installer
+          zip -r ../sbv2.zip .
+
+      - name: Delete existing release with same tag (if exists)
+        run: |
+          gh release delete installer-${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }} --yes || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: installer-${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }}
+          name: Installer Release ${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }}
+          body: |
+            Automated release of installer files.
+
+            Commit: ${{ github.sha }}
+            Date: ${{ steps.vars.outputs.date }}
+          files: sbv2.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
