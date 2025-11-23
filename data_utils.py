@@ -129,7 +129,7 @@ class TextAudioSpeakerLoader(torch.utils.data.Dataset):
         if self.use_mel_spec_posterior:
             spec_filename = spec_filename.replace(".spec.pt", ".mel.pt")
         try:
-            spec = torch.load(spec_filename)
+            spec = torch.load(spec_filename, weights_only=False)
         except:
             if self.use_mel_spec_posterior:
                 spec = mel_spectrogram_torch(
@@ -168,7 +168,7 @@ class TextAudioSpeakerLoader(torch.utils.data.Dataset):
             word2ph[0] += 1
         bert_path = wav_path.replace(".wav", ".bert.pt")
         try:
-            bert_ori = torch.load(bert_path)
+            bert_ori = torch.load(bert_path, weights_only=False)
             assert bert_ori.shape[-1] == len(phone)
         except Exception as e:
             logger.warning("Bert load Failed")

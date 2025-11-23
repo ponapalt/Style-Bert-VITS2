@@ -55,7 +55,7 @@ def process_line(x: tuple[str, bool]):
     bert_path = wav_path.replace(".WAV", ".wav").replace(".wav", ".bert.pt")
 
     try:
-        bert = torch.load(bert_path)
+        bert = torch.load(bert_path, weights_only=False)
         assert bert.shape[-1] == len(phone)
     except Exception:
         bert = extract_bert_feature(text, word2ph, Languages(language_str), device)

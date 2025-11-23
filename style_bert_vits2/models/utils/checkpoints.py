@@ -32,7 +32,7 @@ def load_checkpoint(
     """
 
     assert os.path.isfile(checkpoint_path)
-    checkpoint_dict = torch.load(checkpoint_path, map_location=device)
+    checkpoint_dict = torch.load(checkpoint_path, map_location=device, weights_only=False)
     iteration = checkpoint_dict["iteration"]
     learning_rate = checkpoint_dict["learning_rate"]
     logger.info(

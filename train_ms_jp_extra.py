@@ -44,11 +44,6 @@ torch.backends.cudnn.allow_tf32 = (
 )
 torch.set_num_threads(1)
 torch.set_float32_matmul_precision("medium")
-torch.backends.cuda.sdp_kernel("flash")
-torch.backends.cuda.enable_flash_sdp(True)
-torch.backends.cuda.enable_mem_efficient_sdp(
-    True
-)  # Not available if torch version is lower than 2.0
 
 config = get_config()
 global_step = 0
