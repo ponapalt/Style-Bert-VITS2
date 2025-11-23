@@ -14,11 +14,12 @@ if not hasattr(torchaudio, "AudioMetaData"):
 
     @dataclass
     class AudioMetaData:
-        sample_rate: int = 0
+        # SBV2 uses 44100Hz mono 16bit PCM wav files
+        sample_rate: int = 44100
         num_frames: int = 0
-        num_channels: int = 0
-        bits_per_sample: int = 0
-        encoding: str = ""
+        num_channels: int = 1
+        bits_per_sample: int = 16
+        encoding: str = "PCM_S"
 
     torchaudio.AudioMetaData = AudioMetaData
 
