@@ -33,6 +33,24 @@ if not hasattr(torchaudio, "set_audio_backend"):
 if not hasattr(torchaudio, "get_audio_backend"):
     torchaudio.get_audio_backend = lambda: "soundfile"
 
+# Patch torchaudio.load to use soundfile instead of torchcodec (avoids FFmpeg dependency)
+_original_torchaudio_load = torchaudio.load
+def _patched_torchaudio_load(filepath, *args, **kwargs):
+    try:
+        return _original_torchaudio_load(filepath, *args, **kwargs)
+    except (ImportError, RuntimeError):
+        # Fallback to soundfile if torchcodec fails
+        import soundfile as sf
+        audio_data, sample_rate = sf.read(filepath, dtype="float32")
+        # Convert to torch tensor and ensure correct shape (channels, samples)
+        waveform = torch.from_numpy(audio_data)
+        if waveform.ndim == 1:
+            waveform = waveform.unsqueeze(0)  # mono: (samples,) -> (1, samples)
+        else:
+            waveform = waveform.T  # stereo: (samples, channels) -> (channels, samples)
+        return waveform, sample_rate
+torchaudio.load = _patched_torchaudio_load
+
 from pyannote.audio import Inference, Model
 from tqdm import tqdm
 

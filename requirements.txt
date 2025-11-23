@@ -29,6 +29,7 @@ pyopenjtalk-dict
 pypinyin
 pyworld-prebuilt
 soxr
+soundfile
 stable_ts
 tensorboard
 torch>=2.9.0

@@ -25,6 +25,7 @@ pyannote.audio>=4.0.0
 pyopenjtalk-dict
 pypinyin
 pyworld-prebuilt
+soundfile
 # stable_ts
 # tensorboard
 torch>=2.9.0
