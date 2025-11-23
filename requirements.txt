@@ -23,7 +23,7 @@ onnxsim-prebuilt
 protobuf==4.25
 psutil
 punctuators
-pyannote.audio>=3.1.0
+pyannote.audio>=4.0.0
 pyloudnorm
 pyopenjtalk-dict
 pypinyin
