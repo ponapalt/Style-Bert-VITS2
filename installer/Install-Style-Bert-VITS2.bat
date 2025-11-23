@@ -110,8 +110,8 @@ if !errorlevel! neq 0 ( pause & popd & exit /b !errorlevel! )
 echo --------------------------------------------------
 echo Installing PyTorch...
 echo --------------------------------------------------
-echo Executing: uv pip install "torch>=2.9.0" "torchaudio>=2.9.0 torchcodec" --index-url https://download.pytorch.org/whl/cu128
-uv pip install "torch>=2.9.0" "torchaudio>=2.9.0 torchcodec" --index-url https://download.pytorch.org/whl/cu128
+echo Executing: uv pip install "torch>=2.9.0" "torchaudio>=2.9.0" "torchcodec" --index-url https://download.pytorch.org/whl/cu128
+uv pip install "torch>=2.9.0" "torchaudio>=2.9.0" "torchcodec" --index-url https://download.pytorch.org/whl/cu128
 if !errorlevel! neq 0 ( pause & popd & exit /b !errorlevel! )
 
 echo --------------------------------------------------
