@@ -15,9 +15,9 @@ num2words
 numpy<2
 onnx
 onnxconverter-common
-onnxruntime==1.23.2
-onnxruntime-directml==1.23.0; sys_platform == 'win32'
-onnxruntime-gpu==1.23.2; sys_platform != 'darwin'
+onnxruntime>=1.23.2
+onnxruntime-directml>=1.23.0; sys_platform == 'win32'
+onnxruntime-gpu>=1.23.2; sys_platform != 'darwin'
 onnxsim-prebuilt
 protobuf==4.25
 psutil
