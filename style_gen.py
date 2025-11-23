@@ -5,6 +5,23 @@ from typing import Any
 import numpy as np
 import torch
 from numpy.typing import NDArray
+
+# Patch torchaudio for pyannote.audio compatibility with torchaudio 2.9+
+# AudioMetaData was removed in torchaudio 2.9, but pyannote.audio still references it
+import torchaudio
+if not hasattr(torchaudio, "AudioMetaData"):
+    from dataclasses import dataclass
+
+    @dataclass
+    class AudioMetaData:
+        sample_rate: int = 0
+        num_frames: int = 0
+        num_channels: int = 0
+        bits_per_sample: int = 0
+        encoding: str = ""
+
+    torchaudio.AudioMetaData = AudioMetaData
+
 from pyannote.audio import Inference, Model
 from tqdm import tqdm
 
