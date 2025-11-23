@@ -7,8 +7,10 @@ import torch
 from numpy.typing import NDArray
 
 # Patch torchaudio for pyannote.audio compatibility with torchaudio 2.9+
-# AudioMetaData was removed in torchaudio 2.9, but pyannote.audio still references it
+# Several APIs were removed in torchaudio 2.9, but pyannote.audio still references them
 import torchaudio
+
+# Patch AudioMetaData
 if not hasattr(torchaudio, "AudioMetaData"):
     from dataclasses import dataclass
 
@@ -22,6 +24,14 @@ if not hasattr(torchaudio, "AudioMetaData"):
         encoding: str = "PCM_S"
 
     torchaudio.AudioMetaData = AudioMetaData
+
+# Patch removed backend functions (no-op in 2.9+)
+if not hasattr(torchaudio, "list_audio_backends"):
+    torchaudio.list_audio_backends = lambda: ["soundfile"]
+if not hasattr(torchaudio, "set_audio_backend"):
+    torchaudio.set_audio_backend = lambda backend: None
+if not hasattr(torchaudio, "get_audio_backend"):
+    torchaudio.get_audio_backend = lambda: "soundfile"
 
 from pyannote.audio import Inference, Model
 from tqdm import tqdm
