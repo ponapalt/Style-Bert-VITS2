@@ -48,6 +48,7 @@ def do_transcribe(
     batch_size,
     num_beams,
     hf_repo_id,
+    device,
 ):
     if model_name == "":
         return "Error: モデル名を入力してください。"
@@ -71,6 +72,8 @@ def do_transcribe(
         f'"{initial_prompt}"',
         "--num_beams",
         str(num_beams),
+        "--device",
+        device,
     ]
     if use_hf_whisper:
         cmd.append("--use_hf_whisper")
@@ -228,6 +231,12 @@ def create_dataset_app() -> gr.Blocks:
                     label="ビームサーチのビーム数",
                     info="小さいほど速度が上がる（以前は5）",
                 )
+                device = gr.Radio(
+                    ["cpu", "cuda"],
+                    label="デバイス選択",
+                    value="cpu",
+                    info="CPUを選択するとVRAM使用量が減りますが処理が遅くなります",
+                )
             transcribe_button = gr.Button("音声の文字起こし")
             result2 = gr.Textbox(label="結果")
         slice_button.click(
@@ -254,6 +263,7 @@ def create_dataset_app() -> gr.Blocks:
                 batch_size,
                 num_beams,
                 hf_repo_id,
+                device,
             ],
             outputs=[result2],
         )
