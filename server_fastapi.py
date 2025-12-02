@@ -6,6 +6,7 @@ TODO: server_editor.pyと統合する?
 import argparse
 import os
 import sys
+import tempfile
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Optional
@@ -15,7 +16,7 @@ import GPUtil
 import psutil
 import torch
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query, Request, status
+from fastapi import FastAPI, HTTPException, Query, Request, UploadFile, File, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from scipy.io import wavfile
@@ -39,6 +40,7 @@ from style_bert_vits2.nlp.japanese import pyopenjtalk_worker as pyopenjtalk
 from style_bert_vits2.nlp.japanese.user_dict import update_dict
 from style_bert_vits2.tts_model import TTSModel, TTSModelHolder
 from style_bert_vits2.utils import torch_device_to_onnx_providers
+from transcribe import transcribe_with_faster_whisper
 
 
 config = get_config()
@@ -67,6 +69,10 @@ class AudioResponse(Response):
 
 loaded_models: list[TTSModel] = []
 
+# Whisper モデル (音声認識用)
+# 起動時に初期化され、/voice_changer エンドポイントで使用される
+whisper_model: Optional[Any] = None
+
 
 def load_models(model_holder: TTSModelHolder):
     global loaded_models
@@ -81,6 +87,43 @@ def load_models(model_holder: TTSModelHolder):
         # 起動時に全てのモデルを読み込むのは時間がかかりメモリを食うのでやめる
         # model.load()
         loaded_models.append(model)
+
+
+def load_whisper_model(device: str = "cpu", model_size: str = "large-v3"):
+    """
+    Whisper モデルを初期化する (音声認識用)
+
+    Args:
+        device (str): 使用するデバイス ("cpu" or "cuda")
+        model_size (str): Whisper モデルのサイズ ("large-v3", "large-v2", "large" など)
+    """
+    global whisper_model
+
+    try:
+        from faster_whisper import WhisperModel
+
+        logger.info(f"Loading Whisper model ({model_size}) on {device}...")
+
+        # compute_type の自動選択
+        if device == "cuda":
+            compute_type = "float16"
+        else:
+            compute_type = "int8"
+
+        try:
+            whisper_model = WhisperModel(model_size, device=device, compute_type=compute_type)
+            logger.info(f"Whisper model loaded successfully on {device}")
+        except ValueError as e:
+            logger.warning(f"Failed to load Whisper model with compute_type={compute_type}, trying auto: {e}")
+            whisper_model = WhisperModel(model_size, device=device)
+            logger.info(f"Whisper model loaded successfully with auto compute_type")
+
+    except ImportError:
+        logger.warning("faster-whisper is not installed. Voice changer endpoint will not be available.")
+        whisper_model = None
+    except Exception as e:
+        logger.error(f"Failed to load Whisper model: {e}")
+        whisper_model = None
 
 
 if __name__ == "__main__":
@@ -119,6 +162,10 @@ if __name__ == "__main__":
 
     logger.info("Loading models...")
     load_models(model_holder)
+
+    # Whisper モデルをロード (音声認識用)
+    logger.info("Loading Whisper model for voice changer...")
+    load_whisper_model(device=device, model_size="large-v3")
 
     limit = config.server_config.limit
     if limit < 1:
@@ -265,6 +312,183 @@ if __name__ == "__main__":
         with BytesIO() as wavContent:
             wavfile.write(wavContent, sr, audio)
             return Response(content=wavContent.getvalue(), media_type="audio/wav")
+
+    @app.post("/voice_changer", response_class=AudioResponse)
+    async def voice_changer(
+        request: Request,
+        audio_file: UploadFile = File(..., description="変換元の音声ファイル (WAV形式推奨)"),
+        model_name: str = Query(
+            None,
+            description="変換先モデル名(model_idより優先)。model_assets内のディレクトリ名を指定",
+        ),
+        model_id: int = Query(0, description="変換先モデルID"),
+        speaker_name: str = Query(
+            None,
+            description="変換先話者名(speaker_idより優先)",
+        ),
+        speaker_id: int = Query(0, description="変換先話者ID"),
+        language: str = Query("ja", description="音声認識言語 (ja/en/zh)"),
+        whisper_initial_prompt: str = Query(
+            "",
+            description="Whisper認識の初期プロンプト（認識精度向上に使用）",
+        ),
+        sdp_ratio: float = Query(DEFAULT_SDP_RATIO, description="SDP/DP混合比"),
+        noise: float = Query(DEFAULT_NOISE, description="サンプルノイズの割合"),
+        noisew: float = Query(DEFAULT_NOISEW, description="SDPノイズ"),
+        length: float = Query(DEFAULT_LENGTH, description="話速"),
+        auto_split: bool = Query(DEFAULT_LINE_SPLIT, description="改行で分けて生成"),
+        split_interval: float = Query(DEFAULT_SPLIT_INTERVAL, description="分割時の無音の長さ（秒）"),
+        assist_text: Optional[str] = Query(None, description="感情表現の参照テキスト"),
+        assist_text_weight: float = Query(DEFAULT_ASSIST_TEXT_WEIGHT, description="assist_textの強さ"),
+        style: Optional[str] = Query(DEFAULT_STYLE, description="スタイル"),
+        style_weight: float = Query(DEFAULT_STYLE_WEIGHT, description="スタイルの強さ"),
+        reference_audio_path: Optional[str] = Query(None, description="スタイルを音声ファイルで指定"),
+    ):
+        """
+        Voice Changer: 音声ファイルを別の話者の声に変換する (STT -> TTS)
+
+        アップロードされた音声ファイルを Whisper で音声認識し、
+        認識されたテキストを Style-Bert-VITS2 で音声合成します。
+        """
+        logger.info(
+            f"{request.client.host}:{request.client.port}/voice_changer  "
+            f"file={audio_file.filename}, model_id={model_id}, speaker_id={speaker_id}"
+        )
+
+        # Whisperモデルが初期化されているか確認
+        if whisper_model is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Whisper model is not loaded. Voice changer is not available.",
+            )
+
+        # モデルIDのバリデーション
+        if model_id >= len(model_holder.model_names):
+            raise_validation_error(f"model_id={model_id} not found", "model_id")
+
+        # モデル名が指定されている場合はmodel_idに変換
+        if model_name:
+            model_ids = [
+                i
+                for i, x in enumerate(model_holder.models_info)
+                if x.name == model_name
+            ]
+            if not model_ids:
+                raise_validation_error(f"model_name={model_name} not found", "model_name")
+            if len(model_ids) > 1:
+                raise_validation_error(f"model_name={model_name} is ambiguous", "model_name")
+            model_id = model_ids[0]
+
+        model = loaded_models[model_id]
+
+        # 話者の検証
+        if speaker_name is None:
+            if speaker_id not in model.id2spk.keys():
+                raise_validation_error(f"speaker_id={speaker_id} not found", "speaker_id")
+        else:
+            if speaker_name not in model.spk2id.keys():
+                raise_validation_error(f"speaker_name={speaker_name} not found", "speaker_name")
+            speaker_id = model.spk2id[speaker_name]
+
+        # スタイルの検証
+        if style not in model.style2id.keys():
+            raise_validation_error(f"style={style} not found", "style")
+        assert style is not None
+
+        # 言語の変換
+        language_map = {
+            "ja": Languages.JP,
+            "en": Languages.EN,
+            "zh": Languages.ZH,
+        }
+        if language not in language_map:
+            raise_validation_error(
+                f"language={language} not supported. Use ja/en/zh", "language"
+            )
+        tts_language = language_map[language]
+
+        # 一時ファイルに保存
+        temp_audio_file = None
+        try:
+            # アップロードされたファイルを一時保存
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+                temp_audio_file = temp_file.name
+                content = await audio_file.read()
+                temp_file.write(content)
+
+            logger.info(f"Temporary audio file saved: {temp_audio_file}")
+
+            # Whisper で音声認識
+            logger.info("Starting speech recognition with Whisper...")
+            initial_prompt = whisper_initial_prompt if whisper_initial_prompt else None
+            transcribed_text = transcribe_with_faster_whisper(
+                model=whisper_model,
+                audio_file=Path(temp_audio_file),
+                initial_prompt=initial_prompt,
+                language=language,
+                num_beams=1,
+                no_repeat_ngram_size=10,
+            )
+
+            logger.info(f"Transcription completed: {transcribed_text}")
+
+            if not transcribed_text or transcribed_text.strip() == "":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No speech detected in the audio file.",
+                )
+
+            # Style-Bert-VITS2 で音声合成
+            logger.info("Starting TTS synthesis...")
+            sr, audio = model.infer(
+                text=transcribed_text,
+                language=tts_language,
+                speaker_id=speaker_id,
+                reference_audio_path=reference_audio_path,
+                sdp_ratio=sdp_ratio,
+                noise=noise,
+                noise_w=noisew,
+                length=length,
+                line_split=auto_split,
+                split_interval=split_interval,
+                assist_text=assist_text,
+                assist_text_weight=assist_text_weight,
+                use_assist_text=bool(assist_text),
+                style=style,
+                style_weight=style_weight,
+            )
+
+            logger.success(
+                f"Voice conversion completed successfully. Transcribed text: {transcribed_text}"
+            )
+
+            # WAV ファイルとして返す
+            with BytesIO() as wavContent:
+                wavfile.write(wavContent, sr, audio)
+                return Response(
+                    content=wavContent.getvalue(),
+                    media_type="audio/wav",
+                    headers={
+                        "X-Transcribed-Text": transcribed_text.encode("utf-8").decode("latin1", errors="ignore"),
+                    },
+                )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Voice changer error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Voice conversion failed: {str(e)}",
+            )
+        finally:
+            # 一時ファイルのクリーンアップ
+            if temp_audio_file and os.path.exists(temp_audio_file):
+                try:
+                    os.unlink(temp_audio_file)
+                    logger.info(f"Temporary file deleted: {temp_audio_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete temporary file: {e}")
 
     @app.post("/g2p")
     def g2p(text: str):

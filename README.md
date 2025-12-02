@@ -147,6 +147,22 @@ API仕様は起動後に`/docs`にて確認ください。
 - 入力文字数はデフォルトで100文字が上限となっています。これは`config.yml`の`server.limit`で変更できます。
 - デフォルトではCORS設定を全てのドメインで許可しています。できる限り、`config.yml`の`server.origins`の値を変更し、信頼できるドメインに制限ください(キーを消せばCORS設定を無効にできます)。
 
+#### Voice Changer 機能
+
+APIサーバーには音声ファイルを別の話者の声に変換する `/voice_changer` エンドポイントが含まれています。
+この機能は、アップロードされた音声をWhisperで音声認識し、認識されたテキストをStyle-Bert-VITS2で音声合成することで、簡易的なボイスチェンジャーとして動作します。
+
+詳細な使い方は[VOICE_CHANGER.md](/VOICE_CHANGER.md)を参照してください。
+
+```bash
+# 使用例
+curl -X POST "http://127.0.0.1:5000/voice_changer" \
+  -F "audio_file=@input.wav" \
+  -F "model_id=0" \
+  -F "speaker_id=0" \
+  -o output.wav
+```
+
 また音声合成エディターのAPIサーバーは`python server_editor.py`で起動します。があまりまだ整備をしていません。[エディターのリポジトリ](https://github.com/litagin02/Style-Bert-VITS2-Editor)から必要な最低限のAPIしか現在は実装していません。
 
 音声合成エディターのウェブデプロイについては[このDockerfile](Dockerfile.deploy)を参考にしてください。
